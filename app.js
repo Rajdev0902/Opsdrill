@@ -1,0 +1,44 @@
+const stateKey='opsdrill-v2';
+const state=JSON.parse(localStorage.getItem(stateKey)||'{"done":[],"bookmarks":[],"filter":"All","search":""}');
+let questions=[];
+const topicMeta={
+ Azure:['☁️','Cloud platform, networking, identity and production operations'],Kubernetes:['⎈','Containers, scheduling, networking, probes and incidents'],Terraform:['🏗️','Infrastructure as code, state, modules and safe changes'],Docker:['🐳','Images, containers, networking, security and optimization'],Linux:['⌁','Processes, networking, permissions, logs and debugging'],['CI/CD']:['🚀','Delivery strategy, pipelines, testing and rollback'],DevSecOps:['🛡️','Identity, secrets, supply chain and secure delivery']
+};
+function save(){localStorage.setItem(stateKey,JSON.stringify(state))}
+function pct(){return questions.length?Math.round(state.done.length/questions.length*100):0}
+function esc(s){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
+async function init(){
+ try{const r=await fetch('content/questions.json');questions=await r.json()}catch(e){questions=[]}
+ render();
+}
+function render(){
+ document.getElementById('app').innerHTML=`
+ <header class="topbar"><div class="container nav"><div class="logo">Ops<span>Drill</span></div><nav class="navlinks"><button onclick="go('topics')">Topics</button><button onclick="go('practice')">Question Drill</button><button onclick="go('scenarios')">Scenarios</button><button onclick="openMock()">Mock Interview</button></nav><button class="btn secondary" onclick="openMock()">Start →</button></div></header>
+ <main class="container">
+ <section class="hero"><div class="eyebrow">DevOps interview platform</div><h1>Practice DevOps.<br><span>Think Production.</span></h1><p>Story-based, bilingual interview preparation. Understand the incident, explain your reasoning, and answer like a production engineer.</p><div class="actions"><button class="btn primary" onclick="go('practice')">Start drilling</button><button class="btn secondary" onclick="openMock()">Run mock interview</button></div>
+ <div class="stats"><div class="stat"><strong>${questions.length}+</strong><small>starter questions</small></div><div class="stat"><strong>${questions.filter(q=>q.type==='Scenario').length}</strong><small>production scenarios</small></div><div class="stat"><strong>${pct()}%</strong><small>your mastered progress</small><div class="progress"><i style="width:${pct()}%"></i></div></div><div class="stat"><strong>Hinglish + English</strong><small>learn + speak confidently</small></div></div></section>
+ <section class="section" id="topics"><h2>Build your DevOps stack</h2><p class="sub">Start with concepts. Move into incidents. Finish with senior-level reasoning.</p><div class="topicgrid">${Object.entries(topicMeta).map(([name,m])=>`<article class="topic" onclick="topic('${name}')"><div class="icon">${m[0]}</div><h3>${name}</h3><p>${m[1]}</p><span class="badge">${questions.filter(q=>q.topic===name).length} questions</span></article>`).join('')}</div></section>
+ <section class="section" id="practice"><h2>Question drill</h2><p class="sub">Every answer follows the OpsDrill method: Story → Hinglish understanding → English interview answer → production depth.</p><div class="toolbar"><input class="search" id="search" placeholder="Search Azure, 502, state lock, OIDC..." value="${esc(state.search)}"><div class="filters">${['All','Beginner','Intermediate','Advanced','Scenario','Troubleshooting'].map(f=>`<button class="filter ${state.filter===f?'active':''}" onclick="setFilter('${f}')">${f}</button>`).join('')}</div></div><div id="questionList"></div></section>
+ <section class="section" id="scenarios"><h2>Production scenario drills</h2><p class="sub">Don't jump to commands. Explain what you would observe, isolate, mitigate, and prevent.</p><div class="scenario-grid">${questions.filter(q=>q.type==='Scenario').map(q=>`<article class="card scenario" onclick="focusQ('${q.id}')"><span class="tag">${q.topic.toUpperCase()} · ${q.level}</span><h3>${esc(q.question)}</h3><p>Open the investigation path →</p></article>`).join('')}</div></section>
+ <section class="section"><h2>How OpsDrill works</h2><div class="how"><div class="card step"><b>01 · Story</b>Understand why the incident matters.</div><div class="card step"><b>02 · Reason</b>Build a structured investigation path.</div><div class="card step"><b>03 · Speak</b>Practice the English interview answer.</div><div class="card step"><b>04 · Level up</b>Handle follow-ups and senior trade-offs.</div></div></section>
+ </main><footer class="footer"><div class="container"><strong>OpsDrill</strong> · Practice DevOps. Think Production.</div></footer><div id="modal" class="modal" onclick="if(event.target===this)closeModal()"><div class="modalbox" id="modalbox"></div></div>`;
+ document.getElementById('search').addEventListener('input',e=>{state.search=e.target.value;save();renderQuestions()});
+ renderQuestions();
+}
+function go(id){document.getElementById(id)?.scrollIntoView({behavior:'smooth',block:'start'})}
+function setFilter(f){state.filter=f;save();render();go('practice')}
+function topic(t){state.search=t;state.filter='All';save();render();go('practice')}
+function focusQ(id){state.search=id;save();render();go('practice')}
+function renderQuestions(){
+ const el=document.getElementById('questionList');if(!el)return;
+ const term=state.search.toLowerCase();
+ const list=questions.filter(q=>{const hay=Object.values(q).join(' ').toLowerCase();return (!term||hay.includes(term))&&(state.filter==='All'||q.level===state.filter||q.type===state.filter)});
+ el.innerHTML=list.length?list.map(q=>{const done=state.done.includes(q.id),bm=state.bookmarks.includes(q.id);return `<article class="card question"><div class="qtop"><span class="tag">${q.topic.toUpperCase()} · ${q.level} · ${q.type}</span><button class="star ${bm?'on':''}" onclick="bookmark('${q.id}')">${bm?'★':'☆'}</button></div><h3>${esc(q.question)}</h3><button class="btn secondary reveal" onclick="reveal('${q.id}')">${done?'Review answer':'Reveal answer'}</button><div id="ans-${q.id}"></div></article>`}).join(''):'<div class="card empty">No matching questions. Try another keyword or filter.</div>';
+}
+function reveal(id){const q=questions.find(x=>x.id===id);const box=document.getElementById('ans-'+id);box.innerHTML=`<div class="answer"><h4>🇮🇳 Simple Hinglish Explanation</h4><p>${esc(q.hinglish)}</p><h4>🇬🇧 Interview-ready English Answer</h4><p>${esc(q.english)}</p><h4>🔍 Deep Dive</h4><p>${esc(q.deep)}</p><h4>💻 Practical</h4><pre>${esc(q.commands)}</pre><h4>🏭 Production Example</h4><p>${esc(q.production)}</p><h4>⚠️ Common Mistake</h4><p>${esc(q.mistake)}</p><h4>🧠 Senior-Level Insight</h4><p>${esc(q.senior)}</p><div class="followup"><b>🎤 Follow-up:</b> ${esc(q.followup)}</div><br><button class="btn primary" onclick="master('${q.id}')">${state.done.includes(q.id)?'Mastered ✓':'Mark as mastered'}</button></div>`}
+function master(id){if(!state.done.includes(id))state.done.push(id);save();render();go('practice')}
+function bookmark(id){state.bookmarks=state.bookmarks.includes(id)?state.bookmarks.filter(x=>x!==id):[...state.bookmarks,id];save();renderQuestions()}
+function openMock(){document.getElementById('modalbox').innerHTML=`<button class="close" onclick="closeModal()">×</button><div class="eyebrow">Mock interview</div><h2>Choose your track</h2><p class="sub">Answer aloud before revealing the expected approach.</p><div class="mockgrid"><button onclick="mock('Junior')"><b>0–2 years</b><br>Fundamentals + practical basics</button><button onclick="mock('Mid')"><b>2–5 years</b><br>Cloud + CI/CD + incidents</button><button onclick="mock('Senior')"><b>5–8 years</b><br>Architecture + trade-offs</button><button onclick="mock('SRE')"><b>SRE / Platform</b><br>Reliability + observability</button></div>`;document.getElementById('modal').classList.add('open')}
+function mock(level){let pool=questions.filter(q=>level==='Junior'?q.level==='Beginner':level==='Mid'?q.level!=='Beginner':q.type==='Scenario');const q=pool[Math.floor(Math.random()*pool.length)]||questions[0];document.getElementById('modalbox').innerHTML=`<button class="close" onclick="closeModal()">×</button><div class="eyebrow">Mock interview · ${level}</div><h2>${esc(q.question)}</h2><p class="sub">Think for 60–90 seconds. Structure your answer before opening the expected approach.</p><button class="btn primary" onclick="this.nextElementSibling.hidden=false">Reveal expected approach</button><div class="answer" hidden><h4>Expected approach</h4><p>${esc(q.english)}</p><h4>Follow-up</h4><p>${esc(q.followup)}</p><button class="btn secondary" onclick="mock('${level}')">Next question →</button></div>`}
+function closeModal(){document.getElementById('modal').classList.remove('open')}
+init();
